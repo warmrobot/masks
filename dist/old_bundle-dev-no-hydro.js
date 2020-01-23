@@ -31,27 +31,27 @@ var App = (function () {
     let raf = is_client ? cb => requestAnimationFrame(cb) : noop;
 
     const tasks = new Set();
-    function run_tasks(now) {
+    let running = false;
+    function run_tasks() {
         tasks.forEach(task => {
-            if (!task.c(now)) {
+            if (!task[0](now())) {
                 tasks.delete(task);
-                task.f();
+                task[1]();
             }
         });
-        if (tasks.size !== 0)
+        running = tasks.size > 0;
+        if (running)
             raf(run_tasks);
     }
-    /**
-     * Creates a new task that runs on each raf frame
-     * until it returns a falsy value or is aborted
-     */
-    function loop(callback) {
+    function loop(fn) {
         let task;
-        if (tasks.size === 0)
+        if (!running) {
+            running = true;
             raf(run_tasks);
+        }
         return {
-            promise: new Promise(fulfill => {
-                tasks.add(task = { c: callback, f: fulfill });
+            promise: new Promise(fulfil => {
+                tasks.add(task = [fn, fulfil]);
             }),
             abort() {
                 tasks.delete(task);
@@ -71,9 +71,6 @@ var App = (function () {
     function element(name) {
         return document.createElement(name);
     }
-    function svg_element(name) {
-        return document.createElementNS('http://www.w3.org/2000/svg', name);
-    }
     function text(data) {
         return document.createTextNode(data);
     }
@@ -85,38 +82,6 @@ var App = (function () {
     }
     function children(element) {
         return Array.from(element.childNodes);
-    }
-    function claim_element(nodes, name, attributes, svg) {
-        for (let i = 0; i < nodes.length; i += 1) {
-            const node = nodes[i];
-            if (node.nodeName === name) {
-                let j = 0;
-                while (j < node.attributes.length) {
-                    const attribute = node.attributes[j];
-                    if (attributes[attribute.name]) {
-                        j++;
-                    }
-                    else {
-                        node.removeAttribute(attribute.name);
-                    }
-                }
-                return nodes.splice(i, 1)[0];
-            }
-        }
-        return svg ? svg_element(name) : element(name);
-    }
-    function claim_text(nodes, data) {
-        for (let i = 0; i < nodes.length; i += 1) {
-            const node = nodes[i];
-            if (node.nodeType === 3) {
-                node.data = '' + data;
-                return nodes.splice(i, 1)[0];
-            }
-        }
-        return text(data);
-    }
-    function claim_space(nodes) {
-        return claim_text(nodes, ' ');
     }
     function custom_event(type, detail) {
         const e = document.createEvent('CustomEvent');
@@ -232,11 +197,10 @@ var App = (function () {
     }
     function update($$) {
         if ($$.fragment !== null) {
-            $$.update();
+            $$.update($$.dirty);
             run_all($$.before_update);
-            const dirty = $$.dirty;
-            $$.dirty = [-1];
-            $$.fragment && $$.fragment.p($$.ctx, dirty);
+            $$.fragment && $$.fragment.p($$.dirty, $$.ctx);
+            $$.dirty = null;
             $$.after_update.forEach(add_render_callback);
         }
     }
@@ -348,6 +312,8 @@ var App = (function () {
             }
         };
     }
+
+    const globals = (typeof window !== 'undefined' ? window : global);
     function mount_component(component, target, anchor) {
         const { fragment, on_mount, on_destroy, after_update } = component.$$;
         fragment && fragment.m(target, anchor);
@@ -374,18 +340,18 @@ var App = (function () {
             // TODO null out other refs, including component.$$ (but need to
             // preserve final state?)
             $$.on_destroy = $$.fragment = null;
-            $$.ctx = [];
+            $$.ctx = {};
         }
     }
-    function make_dirty(component, i) {
-        if (component.$$.dirty[0] === -1) {
+    function make_dirty(component, key) {
+        if (!component.$$.dirty) {
             dirty_components.push(component);
             schedule_update();
-            component.$$.dirty.fill(0);
+            component.$$.dirty = blank_object();
         }
-        component.$$.dirty[(i / 31) | 0] |= (1 << (i % 31));
+        component.$$.dirty[key] = true;
     }
-    function init(component, options, instance, create_fragment, not_equal, props, dirty = [-1]) {
+    function init(component, options, instance, create_fragment, not_equal, props) {
         const parent_component = current_component;
         set_current_component(component);
         const prop_values = options.props || {};
@@ -405,21 +371,20 @@ var App = (function () {
             context: new Map(parent_component ? parent_component.$$.context : []),
             // everything else
             callbacks: blank_object(),
-            dirty
+            dirty: null
         };
         let ready = false;
         $$.ctx = instance
-            ? instance(component, prop_values, (i, ret, ...rest) => {
-                const value = rest.length ? rest[0] : ret;
-                if ($$.ctx && not_equal($$.ctx[i], $$.ctx[i] = value)) {
-                    if ($$.bound[i])
-                        $$.bound[i](value);
+            ? instance(component, prop_values, (key, ret, value = ret) => {
+                if ($$.ctx && not_equal($$.ctx[key], $$.ctx[key] = value)) {
+                    if ($$.bound[key])
+                        $$.bound[key](value);
                     if (ready)
-                        make_dirty(component, i);
+                        make_dirty(component, key);
                 }
                 return ret;
             })
-            : [];
+            : prop_values;
         $$.update();
         ready = true;
         run_all($$.before_update);
@@ -461,7 +426,7 @@ var App = (function () {
     }
 
     function dispatch_dev(type, detail) {
-        document.dispatchEvent(custom_event(type, Object.assign({ version: '3.17.3' }, detail)));
+        document.dispatchEvent(custom_event(type, detail));
     }
     function append_dev(target, node) {
         dispatch_dev("SvelteDOMInsert", { target, node });
@@ -507,35 +472,25 @@ var App = (function () {
         };
     }
 
-    /* src/removed-var/error.svelte generated by Svelte v3.17.3 */
-    const file = "src/removed-var/error.svelte";
+    /* src/error.svelte generated by Svelte v3.15.0 */
+
+    const { Error: Error_1 } = globals;
+    const file = "src/error.svelte";
 
     // (45:0) {:else}
     function create_else_block(ctx) {
     	let p;
-    	let t;
     	let p_outro;
     	let current;
 
     	const block = {
     		c: function create() {
     			p = element("p");
-    			t = text("bar");
-    			this.h();
-    		},
-    		l: function claim(nodes) {
-    			p = claim_element(nodes, "P", {});
-    			var p_nodes = children(p);
-    			t = claim_text(p_nodes, "bar");
-    			p_nodes.forEach(detach_dev);
-    			this.h();
-    		},
-    		h: function hydrate() {
-    			add_location(p, file, 45, 1, 701);
+    			p.textContent = "bar";
+    			add_location(p, file, 45, 1, 698);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, p, anchor);
-    			append_dev(p, t);
     			current = true;
     		},
     		i: function intro(local) {
@@ -567,27 +522,15 @@ var App = (function () {
     // (43:0) {#if [].indexOf(a1) && a1 === 1}
     function create_if_block(ctx) {
     	let p;
-    	let t;
 
     	const block = {
     		c: function create() {
     			p = element("p");
-    			t = text("foo");
-    			this.h();
-    		},
-    		l: function claim(nodes) {
-    			p = claim_element(nodes, "P", {});
-    			var p_nodes = children(p);
-    			t = claim_text(p_nodes, "foo");
-    			p_nodes.forEach(detach_dev);
-    			this.h();
-    		},
-    		h: function hydrate() {
-    			add_location(p, file, 43, 1, 681);
+    			p.textContent = "foo";
+    			add_location(p, file, 43, 1, 678);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, p, anchor);
-    			append_dev(p, t);
     		},
     		i: noop,
     		o: noop,
@@ -609,7 +552,7 @@ var App = (function () {
 
     function create_fragment(ctx) {
     	let span;
-    	let t0_value = ([].indexOf(/*a1*/ ctx[0]) && /*a1*/ ctx[0] === 1) + "";
+    	let t0_value = ([].indexOf(ctx.a1) && ctx.a1 === 1) + "";
     	let t0;
     	let t1;
     	let show_if;
@@ -620,13 +563,13 @@ var App = (function () {
     	const if_block_creators = [create_if_block, create_else_block];
     	const if_blocks = [];
 
-    	function select_block_type(ctx, dirty) {
-    		if (dirty & /*a1*/ 1) show_if = !!([].indexOf(/*a1*/ ctx[0]) && /*a1*/ ctx[0] === 1);
+    	function select_block_type(changed, ctx) {
+    		if (show_if == null || changed.a1) show_if = !!([].indexOf(ctx.a1) && ctx.a1 === 1);
     		if (show_if) return 0;
     		return 1;
     	}
 
-    	current_block_type_index = select_block_type(ctx, -1);
+    	current_block_type_index = select_block_type(null, ctx);
     	if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
 
     	const block = {
@@ -636,20 +579,10 @@ var App = (function () {
     			t1 = space();
     			if_block.c();
     			if_block_anchor = empty();
-    			this.h();
+    			add_location(span, file, 41, 0, 602);
     		},
     		l: function claim(nodes) {
-    			span = claim_element(nodes, "SPAN", {});
-    			var span_nodes = children(span);
-    			t0 = claim_text(span_nodes, t0_value);
-    			span_nodes.forEach(detach_dev);
-    			t1 = claim_space(nodes);
-    			if_block.l(nodes);
-    			if_block_anchor = empty();
-    			this.h();
-    		},
-    		h: function hydrate() {
-    			add_location(span, file, 41, 0, 605);
+    			throw new Error_1("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, span, anchor);
@@ -659,10 +592,10 @@ var App = (function () {
     			insert_dev(target, if_block_anchor, anchor);
     			current = true;
     		},
-    		p: function update(ctx, [dirty]) {
-    			if ((!current || dirty & /*a1*/ 1) && t0_value !== (t0_value = ([].indexOf(/*a1*/ ctx[0]) && /*a1*/ ctx[0] === 1) + "")) set_data_dev(t0, t0_value);
+    		p: function update(changed, ctx) {
+    			if ((!current || changed.a1) && t0_value !== (t0_value = ([].indexOf(ctx.a1) && ctx.a1 === 1) + "")) set_data_dev(t0, t0_value);
     			let previous_block_index = current_block_type_index;
-    			current_block_type_index = select_block_type(ctx, dirty);
+    			current_block_type_index = select_block_type(changed, ctx);
 
     			if (current_block_type_index !== previous_block_index) {
     				group_outros();
@@ -711,37 +644,39 @@ var App = (function () {
     	return block;
     }
 
+    let a0 = 0;
+    let a2 = 2;
+    let a3 = 3;
+    let a4 = 4;
+    let a5 = 5;
+    let a6 = 6;
+    let a7 = 7;
+    let a8 = 8;
+    let a9 = 9;
+    let a10 = 10;
+    let a11 = 11;
+    let a12 = 12;
+    let a13 = 13;
+    let a14 = 14;
+    let a15 = 15;
+    let a16 = 16;
+    let a17 = 17;
+    let a18 = 18;
+    let a19 = 19;
+    let a20 = 20;
+    let a21 = 21;
+    let a22 = 22;
+    let a23 = 23;
+    let a24 = 24;
+    let a25 = 25;
+    let a26 = 26;
+    let a27 = 27;
+    let a28 = 28;
+    let a29 = 29;
+    let a30 = 30;
+
     function instance($$self, $$props, $$invalidate) {
-    	let a0 = 0;
     	let a1 = 1;
-    	let a2 = 2;
-    	let a3 = 3;
-    	let a4 = 4;
-    	let a5 = 5;
-    	let a6 = 6;
-    	let a7 = 7;
-    	let a8 = 8;
-    	let a9 = 9;
-    	let a10 = 10;
-    	let a11 = 11;
-    	let a12 = 12;
-    	let a13 = 13;
-    	let a14 = 14;
-    	let a15 = 15;
-    	let a16 = 16;
-    	let a17 = 17;
-    	let a18 = 18;
-    	let a19 = 19;
-    	let a20 = 20;
-    	let a21 = 21;
-    	let a22 = 22;
-    	let a23 = 23;
-    	let a24 = 24;
-    	let a25 = 25;
-    	let a26 = 26;
-    	let a27 = 27;
-    	let a28 = 28;
-    	let a29 = 29;
 
     	$$self.$capture_state = () => {
     		return {};
@@ -749,7 +684,7 @@ var App = (function () {
 
     	$$self.$inject_state = $$props => {
     		if ("a0" in $$props) a0 = $$props.a0;
-    		if ("a1" in $$props) $$invalidate(0, a1 = $$props.a1);
+    		if ("a1" in $$props) $$invalidate("a1", a1 = $$props.a1);
     		if ("a2" in $$props) a2 = $$props.a2;
     		if ("a3" in $$props) a3 = $$props.a3;
     		if ("a4" in $$props) a4 = $$props.a4;
@@ -778,9 +713,10 @@ var App = (function () {
     		if ("a27" in $$props) a27 = $$props.a27;
     		if ("a28" in $$props) a28 = $$props.a28;
     		if ("a29" in $$props) a29 = $$props.a29;
+    		if ("a30" in $$props) a30 = $$props.a30;
     	};
 
-    	return [a1];
+    	return { a1 };
     }
 
     class Error$1 extends SvelteComponentDev {

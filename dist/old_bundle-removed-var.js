@@ -31,27 +31,27 @@ var App = (function () {
     let raf = is_client ? cb => requestAnimationFrame(cb) : noop;
 
     const tasks = new Set();
-    function run_tasks(now) {
+    let running = false;
+    function run_tasks() {
         tasks.forEach(task => {
-            if (!task.c(now)) {
+            if (!task[0](now())) {
                 tasks.delete(task);
-                task.f();
+                task[1]();
             }
         });
-        if (tasks.size !== 0)
+        running = tasks.size > 0;
+        if (running)
             raf(run_tasks);
     }
-    /**
-     * Creates a new task that runs on each raf frame
-     * until it returns a falsy value or is aborted
-     */
-    function loop(callback) {
+    function loop(fn) {
         let task;
-        if (tasks.size === 0)
+        if (!running) {
+            running = true;
             raf(run_tasks);
+        }
         return {
-            promise: new Promise(fulfill => {
-                tasks.add(task = { c: callback, f: fulfill });
+            promise: new Promise(fulfil => {
+                tasks.add(task = [fn, fulfil]);
             }),
             abort() {
                 tasks.delete(task);
@@ -90,17 +90,12 @@ var App = (function () {
         for (let i = 0; i < nodes.length; i += 1) {
             const node = nodes[i];
             if (node.nodeName === name) {
-                let j = 0;
-                while (j < node.attributes.length) {
+                for (let j = 0; j < node.attributes.length; j += 1) {
                     const attribute = node.attributes[j];
-                    if (attributes[attribute.name]) {
-                        j++;
-                    }
-                    else {
+                    if (!attributes[attribute.name])
                         node.removeAttribute(attribute.name);
-                    }
                 }
-                return nodes.splice(i, 1)[0];
+                return nodes.splice(i, 1)[0]; // TODO strip unwanted attributes
             }
         }
         return svg ? svg_element(name) : element(name);
@@ -232,11 +227,10 @@ var App = (function () {
     }
     function update($$) {
         if ($$.fragment !== null) {
-            $$.update();
+            $$.update($$.dirty);
             run_all($$.before_update);
-            const dirty = $$.dirty;
-            $$.dirty = [-1];
-            $$.fragment && $$.fragment.p($$.ctx, dirty);
+            $$.fragment && $$.fragment.p($$.dirty, $$.ctx);
+            $$.dirty = null;
             $$.after_update.forEach(add_render_callback);
         }
     }
@@ -374,18 +368,18 @@ var App = (function () {
             // TODO null out other refs, including component.$$ (but need to
             // preserve final state?)
             $$.on_destroy = $$.fragment = null;
-            $$.ctx = [];
+            $$.ctx = {};
         }
     }
-    function make_dirty(component, i) {
-        if (component.$$.dirty[0] === -1) {
+    function make_dirty(component, key) {
+        if (!component.$$.dirty) {
             dirty_components.push(component);
             schedule_update();
-            component.$$.dirty.fill(0);
+            component.$$.dirty = blank_object();
         }
-        component.$$.dirty[(i / 31) | 0] |= (1 << (i % 31));
+        component.$$.dirty[key] = true;
     }
-    function init(component, options, instance, create_fragment, not_equal, props, dirty = [-1]) {
+    function init(component, options, instance, create_fragment, not_equal, props) {
         const parent_component = current_component;
         set_current_component(component);
         const prop_values = options.props || {};
@@ -405,21 +399,20 @@ var App = (function () {
             context: new Map(parent_component ? parent_component.$$.context : []),
             // everything else
             callbacks: blank_object(),
-            dirty
+            dirty: null
         };
         let ready = false;
         $$.ctx = instance
-            ? instance(component, prop_values, (i, ret, ...rest) => {
-                const value = rest.length ? rest[0] : ret;
-                if ($$.ctx && not_equal($$.ctx[i], $$.ctx[i] = value)) {
-                    if ($$.bound[i])
-                        $$.bound[i](value);
+            ? instance(component, prop_values, (key, ret, value = ret) => {
+                if ($$.ctx && not_equal($$.ctx[key], $$.ctx[key] = value)) {
+                    if ($$.bound[key])
+                        $$.bound[key](value);
                     if (ready)
-                        make_dirty(component, i);
+                        make_dirty(component, key);
                 }
                 return ret;
             })
-            : [];
+            : prop_values;
         $$.update();
         ready = true;
         run_all($$.before_update);
@@ -461,7 +454,7 @@ var App = (function () {
     }
 
     function dispatch_dev(type, detail) {
-        document.dispatchEvent(custom_event(type, Object.assign({ version: '3.17.3' }, detail)));
+        document.dispatchEvent(custom_event(type, detail));
     }
     function append_dev(target, node) {
         dispatch_dev("SvelteDOMInsert", { target, node });
@@ -507,7 +500,7 @@ var App = (function () {
         };
     }
 
-    /* src/removed-var/error.svelte generated by Svelte v3.17.3 */
+    /* src/removed-var/error.svelte generated by Svelte v3.15.0 */
     const file = "src/removed-var/error.svelte";
 
     // (45:0) {:else}
@@ -609,7 +602,7 @@ var App = (function () {
 
     function create_fragment(ctx) {
     	let span;
-    	let t0_value = ([].indexOf(/*a1*/ ctx[0]) && /*a1*/ ctx[0] === 1) + "";
+    	let t0_value = ([].indexOf(ctx.a1) && ctx.a1 === 1) + "";
     	let t0;
     	let t1;
     	let show_if;
@@ -620,13 +613,13 @@ var App = (function () {
     	const if_block_creators = [create_if_block, create_else_block];
     	const if_blocks = [];
 
-    	function select_block_type(ctx, dirty) {
-    		if (dirty & /*a1*/ 1) show_if = !!([].indexOf(/*a1*/ ctx[0]) && /*a1*/ ctx[0] === 1);
+    	function select_block_type(changed, ctx) {
+    		if (show_if == null || changed.a1) show_if = !!([].indexOf(ctx.a1) && ctx.a1 === 1);
     		if (show_if) return 0;
     		return 1;
     	}
 
-    	current_block_type_index = select_block_type(ctx, -1);
+    	current_block_type_index = select_block_type(null, ctx);
     	if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
 
     	const block = {
@@ -659,10 +652,10 @@ var App = (function () {
     			insert_dev(target, if_block_anchor, anchor);
     			current = true;
     		},
-    		p: function update(ctx, [dirty]) {
-    			if ((!current || dirty & /*a1*/ 1) && t0_value !== (t0_value = ([].indexOf(/*a1*/ ctx[0]) && /*a1*/ ctx[0] === 1) + "")) set_data_dev(t0, t0_value);
+    		p: function update(changed, ctx) {
+    			if ((!current || changed.a1) && t0_value !== (t0_value = ([].indexOf(ctx.a1) && ctx.a1 === 1) + "")) set_data_dev(t0, t0_value);
     			let previous_block_index = current_block_type_index;
-    			current_block_type_index = select_block_type(ctx, dirty);
+    			current_block_type_index = select_block_type(changed, ctx);
 
     			if (current_block_type_index !== previous_block_index) {
     				group_outros();
@@ -711,37 +704,38 @@ var App = (function () {
     	return block;
     }
 
+    let a0 = 0;
+    let a2 = 2;
+    let a3 = 3;
+    let a4 = 4;
+    let a5 = 5;
+    let a6 = 6;
+    let a7 = 7;
+    let a8 = 8;
+    let a9 = 9;
+    let a10 = 10;
+    let a11 = 11;
+    let a12 = 12;
+    let a13 = 13;
+    let a14 = 14;
+    let a15 = 15;
+    let a16 = 16;
+    let a17 = 17;
+    let a18 = 18;
+    let a19 = 19;
+    let a20 = 20;
+    let a21 = 21;
+    let a22 = 22;
+    let a23 = 23;
+    let a24 = 24;
+    let a25 = 25;
+    let a26 = 26;
+    let a27 = 27;
+    let a28 = 28;
+    let a29 = 29;
+
     function instance($$self, $$props, $$invalidate) {
-    	let a0 = 0;
     	let a1 = 1;
-    	let a2 = 2;
-    	let a3 = 3;
-    	let a4 = 4;
-    	let a5 = 5;
-    	let a6 = 6;
-    	let a7 = 7;
-    	let a8 = 8;
-    	let a9 = 9;
-    	let a10 = 10;
-    	let a11 = 11;
-    	let a12 = 12;
-    	let a13 = 13;
-    	let a14 = 14;
-    	let a15 = 15;
-    	let a16 = 16;
-    	let a17 = 17;
-    	let a18 = 18;
-    	let a19 = 19;
-    	let a20 = 20;
-    	let a21 = 21;
-    	let a22 = 22;
-    	let a23 = 23;
-    	let a24 = 24;
-    	let a25 = 25;
-    	let a26 = 26;
-    	let a27 = 27;
-    	let a28 = 28;
-    	let a29 = 29;
 
     	$$self.$capture_state = () => {
     		return {};
@@ -749,7 +743,7 @@ var App = (function () {
 
     	$$self.$inject_state = $$props => {
     		if ("a0" in $$props) a0 = $$props.a0;
-    		if ("a1" in $$props) $$invalidate(0, a1 = $$props.a1);
+    		if ("a1" in $$props) $$invalidate("a1", a1 = $$props.a1);
     		if ("a2" in $$props) a2 = $$props.a2;
     		if ("a3" in $$props) a3 = $$props.a3;
     		if ("a4" in $$props) a4 = $$props.a4;
@@ -780,7 +774,7 @@ var App = (function () {
     		if ("a29" in $$props) a29 = $$props.a29;
     	};
 
-    	return [a1];
+    	return { a1 };
     }
 
     class Error$1 extends SvelteComponentDev {
